@@ -1,0 +1,25 @@
+apply plugin: 'java'
+apply plugin: 'eclipse'
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	compile			"pircbot:pircbot:1.5.0"	
+	compile			"org.eclipse.mylyn.github:org.eclipse.egit.github.core:2.1.5"
+}
+
+task makeJar(type: Jar, dependsOn: [processResources, compileJava]) {
+	from files(sourceSets.main.output.classesDir)
+	from files(sourceSets.main.output.resourcesDir)
+	from { configurations.compile.collect { zipTree(it) } }
+
+	baseName = "sybot"
+	version  = ""
+	
+	manifest { 
+		attributes "Main-Class": "org.syncany.bot.SyBot"
+	}	
+}
+
