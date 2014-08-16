@@ -3,3 +3,6 @@ server=irc.freenode.net
 channel=#syncany
 identify=(NickServ password)
 logdir=logs/
+
+github.user=syncany
+github.repo=syncany

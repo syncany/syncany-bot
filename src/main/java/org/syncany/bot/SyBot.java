@@ -24,6 +24,9 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -38,11 +41,16 @@ public class SyBot extends PircBot {
 	private static Pattern REQ_ISSUE_PATTERN = Pattern.compile("^\\#(\\d{1,10})");
 	private static int REQ_ISSUE_PATTERN_GROUP_ISSUE = 1;
 	
+	private static Pattern REQ_OPEN_PATTERN = Pattern.compile("^\\#open");
+
 	private String name;
 	private String server;
 	private String channel;
 	private String identify; // password	
 	private String logdir;
+	
+	private String githubUser;
+	private String githubRepo;	
 	
 	public static void main(String[] args) throws Exception {
 		String configFile = (args.length > 0) ? args[0] : DEFAULT_CONFIG_FILE;		
@@ -62,9 +70,11 @@ public class SyBot extends PircBot {
 		this.channel = config.getProperty("channel");
 		this.identify = config.getProperty("identify");
 		this.logdir = config.getProperty("logdir", "logs/");
+		this.githubUser = config.getProperty("github.user");
+		this.githubRepo = config.getProperty("github.repo");
 		
-		if (name == null || server == null || channel == null) {
-			throw new Exception("Invalid config. Properties 'name', 'server' and 'channel' must be set.");
+		if (name == null || server == null || channel == null || githubUser == null || githubRepo == null) {
+			throw new Exception("Invalid config. Properties 'name', 'server', 'channel', 'githubUser' and  'githubRepo' must be set.");
 		}
 		
 		new File(logdir).mkdirs();
@@ -105,20 +115,46 @@ public class SyBot extends PircBot {
 	public void onMessage(String channel, String sender, String login, String hostname, String message) {		
 		appendToLog(String.format("<%s> %s", shortenStr(sender, 50), shortenStr(message, 1024)));		
 
+		// #64 -> print issue details
 		Matcher printIssueMatcher = REQ_ISSUE_PATTERN.matcher(message);
 		
 		if (printIssueMatcher.matches()) {
 			int issueId = Integer.parseInt(printIssueMatcher.group(REQ_ISSUE_PATTERN_GROUP_ISSUE));
 			handlePrintIssue(issueId);			
 		}		
+		
+		// #open -> print last 5 open issues
+		Matcher printOpenMatcher = REQ_OPEN_PATTERN.matcher(message);
+		
+		if (printOpenMatcher.matches()) {
+			handleOpenIssues();			
+		}		
 	}
 	
 	private void handlePrintIssue(int issueId) {
 		try {
-			Issue issue = new IssueService().getIssue("syncany", "syncany", issueId);
+			Issue issue = new IssueService().getIssue(githubUser, githubRepo, issueId);
 			
 			sendAndLog("Issue #" + issueId + " (" + issue.getState() + "): "+ issue.getTitle());
 			sendAndLog(issue.getHtmlUrl());
+		}
+		catch (IOException e) {
+			e.printStackTrace();
+		}
+	}	
+	
+	private void handleOpenIssues() {
+		try {
+			Map<String, String> issueFilter = new HashMap<>();
+			issueFilter.put("state", "open");
+			
+			List<Issue> issues = new IssueService().getIssues(githubUser, githubRepo, issueFilter);			
+			int maxResultList = (issues.size() <= 5) ? issues.size() : 5;
+			
+			for (int i=0; i<maxResultList; i++) {
+				Issue issue = issues.get(i);
+				sendAndLog("Issue #" + issue.getNumber() + ": " + issue.getTitle());				
+			}			
 		}
 		catch (IOException e) {
 			e.printStackTrace();
