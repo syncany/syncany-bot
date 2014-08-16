@@ -66,6 +66,8 @@ public class SyBot extends PircBot {
 		if (name == null || server == null || channel == null) {
 			throw new Exception("Invalid config. Properties 'name', 'server' and 'channel' must be set.");
 		}
+		
+		new File(logdir).mkdirs();
 	}
 
 	public void start() throws Exception {

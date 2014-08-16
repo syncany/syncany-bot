@@ -23,3 +23,18 @@ task makeJar(type: Jar, dependsOn: [processResources, compileJava]) {
 	}	
 }
 
+task dist(dependsOn: makeJar) {
+	doLast {
+		copy {
+			from files("build/libs/sybot.jar")
+			into "build/dist/"
+		}
+		
+		copy {
+			from("sybot.properties.example")
+			into("build/dist/")
+			rename("sybot.properties.example", "sybot.properties")
+		}
+	}
+}
+
