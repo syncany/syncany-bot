@@ -23,6 +23,7 @@ import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -32,6 +33,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.eclipse.egit.github.core.Issue;
+import org.eclipse.egit.github.core.Label;
 import org.eclipse.egit.github.core.service.IssueService;
 import org.jibble.pircbot.PircBot;
 
@@ -41,7 +43,9 @@ public class SyBot extends PircBot {
 	private static Pattern REQ_ISSUE_PATTERN = Pattern.compile("^\\#(\\d{1,10})");
 	private static int REQ_ISSUE_PATTERN_GROUP_ISSUE = 1;
 	
-	private static Pattern REQ_OPEN_PATTERN = Pattern.compile("^\\#open");
+	private static Pattern REQ_OPEN_PATTERN = Pattern.compile("^\\#open(.*)");
+	private static Pattern REQ_OPEN_PATTERN_PAGE = Pattern.compile("(\\d{1,3})");
+	private static Pattern REQ_OPEN_PATTERN_TEXT = Pattern.compile("(\\w+)");
 
 	private String name;
 	private String server;
@@ -127,7 +131,7 @@ public class SyBot extends PircBot {
 		Matcher printOpenMatcher = REQ_OPEN_PATTERN.matcher(message);
 		
 		if (printOpenMatcher.matches()) {
-			handleOpenIssues();			
+			handleOpenIssues(message);			
 		}		
 	}
 	
@@ -135,7 +139,16 @@ public class SyBot extends PircBot {
 		try {
 			Issue issue = new IssueService().getIssue(githubUser, githubRepo, issueId);
 			
+			String labelStr = "";
+			List<Label> labels = issue.getLabels();
+			
+			for (int i=0; i<labels.size(); i++) {
+				labelStr += labels.get(i);
+				labelStr += (i < labels.size()-1) ? ", " : "";
+			}
+			
 			sendAndLog("Issue #" + issueId + " (" + issue.getState() + "): "+ issue.getTitle());
+			sendAndLog("Created at " + issue.getCreatedAt() + " by " + issue.getUser().getName() + ", " + issue.getComments() + " comment(s), labels: " + labelStr);
 			sendAndLog(issue.getHtmlUrl());
 		}
 		catch (IOException e) {
@@ -143,18 +156,54 @@ public class SyBot extends PircBot {
 		}
 	}	
 	
-	private void handleOpenIssues() {
+	private void handleOpenIssues(String message) {
 		try {
 			Map<String, String> issueFilter = new HashMap<>();
 			issueFilter.put("state", "open");
 			
-			List<Issue> issues = new IssueService().getIssues(githubUser, githubRepo, issueFilter);			
-			int maxResultList = (issues.size() <= 5) ? issues.size() : 5;
+			List<Issue> allIssues = new IssueService().getIssues(githubUser, githubRepo, issueFilter);
+			List<Issue> filteredIssues = new ArrayList<>();
 			
-			for (int i=0; i<maxResultList; i++) {
-				Issue issue = issues.get(i);
-				sendAndLog("Issue #" + issue.getNumber() + ": " + issue.getTitle());				
+			// Page
+			int startIndex = 0;
+			Matcher startIndexMatcher = REQ_OPEN_PATTERN_PAGE.matcher(message);
+			
+			if (startIndexMatcher.matches()) {
+				startIndex = Integer.parseInt(startIndexMatcher.group(1));
+			}
+			
+			// Texts
+			List<String> searchTexts = new ArrayList<>();
+			Matcher textMatcher = REQ_OPEN_PATTERN_TEXT.matcher(message);
+			
+			while (textMatcher.find()) {
+				searchTexts.add(textMatcher.group(0));
+			}
+			
+			// Filter
+			int matchIndex = 0;
+			
+			for (Issue issue : allIssues) {
+				boolean textMatches = false;
+				
+				a: for (String searchText : searchTexts) {
+					for (Label label : issue.getLabels()) {						
+						if (label.getName().toLowerCase().contains(searchText.toLowerCase())) {
+							textMatches = true;
+							break a;
+						}
+					}					
+				}
+				
+				if (textMatches) {
+					filteredIssues.add(issue);
+				}
 			}			
+			
+			for (Issue issue : filteredIssues) {
+				sendAndLog("Issue #" + issue.getNumber() + ": " + issue.getTitle());
+				//System.out.println("Issue #" + issue.getNumber() + ": " + issue.getTitle());
+			}
 		}
 		catch (IOException e) {
 			e.printStackTrace();
